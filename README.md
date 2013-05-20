@@ -1,5 +1,5 @@
 ---
-![![MIT License](https://raw.github.com/initbrain/worldmap/master/worldmap/images/logo_mit.png)](http://opensource.org/licenses/MIT)  
+[![MIT License](https://raw.github.com/initbrain/worldmap/master/worldmap/images/logo_mit.png)](http://opensource.org/licenses/MIT)  
 [MIT License](http://opensource.org/licenses/MIT)
 
 ---
