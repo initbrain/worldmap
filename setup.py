@@ -10,7 +10,7 @@ from worldmap import NAME, VERSION, AUTHOR, CONTACT
 
 CURRENT_DIR = os.path.dirname(__file__)
 
-README_PATH = os.path.join(CURRENT_DIR, 'README.txt')
+README_PATH = os.path.join(CURRENT_DIR, 'README')
 if os.path.exists(README_PATH):
     with open(README_PATH) as readme:
         README = readme.read().strip()
@@ -45,8 +45,6 @@ setup(
     },
     data_files=[
         ('worldmap/images/', ['worldmap/images/icone.png',
-                    'worldmap/images/logo_gpl_v3.png',
-                    'worldmap/images/logo_april.png',
                     'worldmap/images/a_propos.png']),
         ('worldmap/core/', ['worldmap/core/modules.json',
                             'worldmap/core/knowledge.db',
