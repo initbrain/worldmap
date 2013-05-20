@@ -1,0 +1,93 @@
+{
+    "Python World Map":
+        [
+            {
+                "name": "Cartography",
+                "dependency":
+                    [
+                        {
+                            "name": "matplotlib",
+                            "desc":"Python based plotting system in a style similar to Matlab",
+                            "type": "lib",
+                            "homepage":
+                                [
+                                    "http://matplotlib.org/"
+                                ],
+                            "doc":
+                                [
+                                    "http://matplotlib.org/contents.html"
+                                ],
+                            "install":
+                                [
+                                    {
+                                        "type": "apt-get",
+                                        "target": "python-matplotlib",
+                                        "tested":
+                                            [
+                                                "ubuntu 12.10",
+                                                "xubuntu 12.10"
+                                            ]
+                                    }
+                                ]
+                        },
+                        {
+                            "name": "mpl_toolkits.basemap",
+                            "desc": "matplotlib toolkit to plot on map projections",
+                            "type": "lib",
+                            "homepage":
+                                [
+                                    ""
+                                ],
+                            "doc":
+                                [
+                                    ""
+                                ],
+                            "install":
+                                [
+                                    {
+                                        "type": "apt-get",
+                                        "target": "python-mpltoolkits.basemap",
+                                        "tested":
+                                            [
+                                                "ubuntu 12.10",
+                                                "xubuntu 12.10"
+                                            ]
+                                    }
+                                ]
+                        }
+                    ]
+            },
+            {
+                "name": "Database",
+                "dependency":
+                    [
+                        {
+                            "name": "peewee",
+                            "desc": "",
+                            "type": "lib",
+                            "homepage":
+                                [
+                                    ""
+                                ],
+                            "doc":
+                                [
+                                    ""
+                                ],
+                            "install":
+                                [
+                                    {
+                                        "type": "pip",
+                                        "target": "peewee==2.0.4",
+                                        "tested":
+                                            [
+                                                "ubuntu 12.10",
+                                                "xubuntu 12.10",
+                                                "Fedora 18 Live Security (lxde)"
+                                            ]
+                                    }
+                                ]
+                        }
+                    ]
+            }
+        ]
+}
