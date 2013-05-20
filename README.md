@@ -1,5 +1,5 @@
 ---
-![![MIT License](http://opensource.org/licenses/MIT)](https://raw.github.com/initbrain/worldmap/master/worldmap/images/logo_mit.png)  
+![![MIT License](https://raw.github.com/initbrain/worldmap/master/worldmap/images/logo_mit.png)](http://opensource.org/licenses/MIT)  
 [MIT License](http://opensource.org/licenses/MIT)
 
 ---
@@ -7,7 +7,7 @@
 Python World Map
 =================
 
-*   **Screenshot:**
+*   **Screenshots:**
 
     [![Python World Map](https://raw.github.com/initbrain/worldmap/master/worldmap/images/screenshot_th.png)](https://raw.github.com/initbrain/worldmap/master/worldmap/images/screenshot.png)
     [![Python World Map](https://raw.github.com/initbrain/worldmap/master/worldmap/images/fast_trace_th.png)](https://raw.github.com/initbrain/worldmap/master/worldmap/images/fast_trace.png)
@@ -35,4 +35,4 @@ Python World Map
 
         # worldmap
 
-    NB: F11 for fullscreen
+    NB: the full screen keyboard shortcut is **F11**.
