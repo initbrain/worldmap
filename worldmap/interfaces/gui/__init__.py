@@ -6,6 +6,10 @@
 # red - if possible presence of malware or blacklisted IP addr
 # if warning, notification via pynotify
 # + scapy module for sniffing ?
+#TODO asap
+# check traceroute backup and replot them when reseting map (new loop feature)
+# check thread state before closing gui (crash if running)
+# keep tack of fast ploting, don't remove plot that we have to replot because connection keep open
 
 # from matplotlib.backends.backend_gtk import FigureCanvasGTK as FigureCanvas
 # from matplotlib.backends.backend_gtkagg import FigureCanvasGTKAgg as FigureCanvas
@@ -21,6 +25,7 @@ import numpy as np
 import gobject
 import gtk
 import thread
+from threading import Thread, Event
 import GeoIP
 import socket
 import urllib2
@@ -59,7 +64,33 @@ COLOR_D = '0.1'
 COLOR_E = '0.0'
 
 
-class Netstat:
+class Netstat(object):
+    def __init__(self, event, ui):
+        # Thread.__init__(self)
+        self.thread = Thread(target=self.run)
+        self.stopped = event
+        self.ui = ui
+
+    def run(self):
+        print "netstat thread"
+        # self.netstat(self.ui)
+
+        wait_period = 0.5
+        while not self.stopped.wait(wait_period):
+            print "\nnetstat thread loop"
+            self.netstat(self.ui)
+
+            # Config parameter used here
+            for row in self.ui.liststore_config:
+                if row[0] == "Period between each monitor loop (in seconds)":
+                    if unicode(row[1]).isnumeric():
+                        wait_period = float(row[1])
+                    break
+
+            print "wait_period", wait_period
+
+        self.stopped.clear()
+
     def netstat(self, ui):
     ### retrieves the netstat table from /proc/net/tcp
     ### does practicly the same as typing netstat into the terminal
@@ -107,6 +138,19 @@ class Netstat:
 
         # see : https://psutil.googlecode.com/hg/examples/
         import psutil
+
+        # print ui.m
+        # ui.m = Basemap(ui.m_orig)
+        # print ui.m
+        for plot in ui.plot_handle:
+            plot.remove()
+        ui.plot_handle = []
+        gtk.gdk.threads_enter()
+        ui.canvas.draw()
+        gtk.gdk.threads_leave()
+
+        print "##################################################"
+
         for pid in psutil.get_pid_list():
             try:
                 p = psutil.Process(pid)
@@ -140,6 +184,7 @@ class Netstat:
                                 print err
 
                             if myloc[0] is not None and dstloc[0] is not None:
+                                print '-> location found'
                                 # Config parameter used here
                                 fast = True
                                 for row in ui.liststore_config:
@@ -156,18 +201,18 @@ class Netstat:
                                     # Connectons
                                     xpt1, ypt1 = ui.m(myloc[0], myloc[1])
                                     xpt2, ypt2 = ui.m(dstloc[0], dstloc[1])
-                                    ui.m.plot([xpt1, xpt2], [ypt1, ypt2], 'k', color=COLOR_HIGH_RISK)
+                                    ui.plot_handle.append(ui.m.plot([xpt1, xpt2], [ypt1, ypt2], 'k', color=COLOR_HIGH_RISK)[0])
 
                                     # Hops
                                     nicon = 'o'
                                     nsize = 6
                                     xpt, ypt = ui.m(myloc[0], myloc[1])
-                                    ui.m.plot(xpt, ypt, nicon, color=COLOR_LOW_RISK, markersize=nsize)
+                                    ui.plot_handle.append(ui.m.plot(xpt, ypt, nicon, color=COLOR_LOW_RISK, markersize=nsize)[0])
                                     xpt, ypt = ui.m(dstloc[0], dstloc[1])
-                                    ui.m.plot(xpt, ypt, nicon, color=COLOR_HIGH_RISK, markersize=nsize)
+                                    ui.plot_handle.append(ui.m.plot(xpt, ypt, nicon, color=COLOR_HIGH_RISK, markersize=nsize)[0])
 
                                     ui.traceroutes[x.remote_address[0]]['state'] = 'fast mapped'
-                                    print "ui.traceroutes :", ui.traceroutes
+                                    # print "ui.traceroutes :", ui.traceroutes
                                     gtk.gdk.threads_enter()
                                     ui.canvas.draw()
                                     gtk.gdk.threads_leave()
@@ -175,9 +220,9 @@ class Netstat:
                                     instTrace = Trace()
                                     thread.start_new_thread(Trace.traceroute, (instTrace, ui, x.remote_address[0]))
                             else:
+                                print '-> location not found'
                                 ui.traceroutes[x.remote_address[0]]['error'] = 'no location found'
                                 ui.traceroutes[x.remote_address[0]]['state'] = 'error'
-                                print 'no location found'
 
         # if ui.liststore_netstat is not None:
         #     instTrace = Trace()
@@ -237,47 +282,109 @@ class Netstat:
 class Whois:
     def ip2coor(self, ip):
     ### turns ip into coordinates/ returns lat and longitude
-        fDatabase = '%s/core/GeoLiteCity.dat' % WORLDMAP_PATH #instData.getGeoIPDatabase()
-        ### get the database filename
-        gi  = GeoIP.open(fDatabase, GeoIP.GEOIP_STANDARD)
-        ### give us some GeoIP object
-        gir = gi.record_by_addr(ip)
-        ### lookup the ip
-        if gir is not None:
-            return gir['longitude'], gir['latitude']
-            ### return the latitude and longitude
+
+        pattern="(\A([0-9a-f]{1,4}:){1,1}(:[0-9a-f]{1,4}){1,6}\Z)|(\A([0-9a-f]{1,4}:){1,2}(:[0-9a-f]{1,4}){1,5}\Z)|(\A([0-9a-f]{1,4}:){1,3}(:[0-9a-f]{1,4}){1,4}\Z)|(\A([0-9a-f]{1,4}:){1,4}(:[0-9a-f]{1,4}){1,3}\Z)|(\A([0-9a-f]{1,4}:){1,5}(:[0-9a-f]{1,4}){1,2}\Z)|(\A([0-9a-f]{1,4}:){1,6}(:[0-9a-f]{1,4}){1,1}\Z)|(\A(([0-9a-f]{1,4}:){1,7}|:):\Z)|(\A:(:[0-9a-f]{1,4}){1,7}\Z)|(\A((([0-9a-f]{1,4}:){6})(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3})\Z)|(\A(([0-9a-f]{1,4}:){5}[0-9a-f]{1,4}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3})\Z)|(\A([0-9a-f]{1,4}:){5}:[0-9a-f]{1,4}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A([0-9a-f]{1,4}:){1,1}(:[0-9a-f]{1,4}){1,4}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A([0-9a-f]{1,4}:){1,2}(:[0-9a-f]{1,4}){1,3}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A([0-9a-f]{1,4}:){1,3}(:[0-9a-f]{1,4}){1,2}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A([0-9a-f]{1,4}:){1,4}(:[0-9a-f]{1,4}){1,1}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A(([0-9a-f]{1,4}:){1,5}|:):(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A:(:[0-9a-f]{1,4}){1,5}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)"
+
+        regex_res = re.findall(pattern, ip)
+
+        if len(regex_res):
+            fDatabase_v6 = '%s/core/GeoLiteCityv6.dat' % WORLDMAP_PATH #instData.getGeoIPDatabase()
+            ### get the database filename
+            gi_v6 = GeoIP.open(fDatabase_v6, GeoIP.GEOIP_STANDARD)
+            ### give us some GeoIP object
+            gir_v6 = gi_v6.record_by_addr_v6(ip)
+            ### lookup the ip
+            if gir_v6 is not None:
+                return gir_v6['longitude'], gir_v6['latitude']
+            else:
+                return None, None
         else:
-            return None, None
+            fDatabase = '%s/core/GeoLiteCity.dat' % WORLDMAP_PATH #instData.getGeoIPDatabase()
+            ### get the database filename
+            gi = GeoIP.open(fDatabase, GeoIP.GEOIP_STANDARD)
+            ### give us some GeoIP object
+            gir = gi.record_by_addr(ip)
+            ### lookup the ip
+            if gir is not None:
+                return gir['longitude'], gir['latitude']
+                ### return the latitude and longitude
+            else:
+                return None, None
 
     def ip2country(self, ip):
     ### turns ip into country
-        fDatabase = '%s/core/GeoLiteCity.dat' % WORLDMAP_PATH
-        gi  = GeoIP.open(fDatabase, GeoIP.GEOIP_STANDARD)
-        gir = gi.record_by_addr(ip)
-        if gir is not None and gir.has_key('country_name') and gir['country_name'] is not None:
-            return gir['country_name'].decode('latin1').encode('utf-8')
+
+        pattern="(\A([0-9a-f]{1,4}:){1,1}(:[0-9a-f]{1,4}){1,6}\Z)|(\A([0-9a-f]{1,4}:){1,2}(:[0-9a-f]{1,4}){1,5}\Z)|(\A([0-9a-f]{1,4}:){1,3}(:[0-9a-f]{1,4}){1,4}\Z)|(\A([0-9a-f]{1,4}:){1,4}(:[0-9a-f]{1,4}){1,3}\Z)|(\A([0-9a-f]{1,4}:){1,5}(:[0-9a-f]{1,4}){1,2}\Z)|(\A([0-9a-f]{1,4}:){1,6}(:[0-9a-f]{1,4}){1,1}\Z)|(\A(([0-9a-f]{1,4}:){1,7}|:):\Z)|(\A:(:[0-9a-f]{1,4}){1,7}\Z)|(\A((([0-9a-f]{1,4}:){6})(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3})\Z)|(\A(([0-9a-f]{1,4}:){5}[0-9a-f]{1,4}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3})\Z)|(\A([0-9a-f]{1,4}:){5}:[0-9a-f]{1,4}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A([0-9a-f]{1,4}:){1,1}(:[0-9a-f]{1,4}){1,4}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A([0-9a-f]{1,4}:){1,2}(:[0-9a-f]{1,4}){1,3}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A([0-9a-f]{1,4}:){1,3}(:[0-9a-f]{1,4}){1,2}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A([0-9a-f]{1,4}:){1,4}(:[0-9a-f]{1,4}){1,1}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A(([0-9a-f]{1,4}:){1,5}|:):(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A:(:[0-9a-f]{1,4}){1,5}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)"
+
+        regex_res = re.findall(pattern, ip)
+
+        if len(regex_res):
+            fDatabase_v6 = '%s/core/GeoLiteCityv6.dat' % WORLDMAP_PATH #instData.getGeoIPDatabase()
+            ### get the database filename
+            gi_v6 = GeoIP.open(fDatabase_v6, GeoIP.GEOIP_STANDARD)
+            ### give us some GeoIP object
+            gir_v6 = gi_v6.record_by_addr_v6(ip)
+            ### lookup the ip
+            if gir_v6 is not None and gir_v6.has_key('country_name') and gir_v6['country_name'] is not None:
+                return gir_v6['country_name'].decode('latin1').encode('utf-8')
+            else:
+                return None
         else:
-            return None
+            fDatabase = '%s/core/GeoLiteCity.dat' % WORLDMAP_PATH
+            gi  = GeoIP.open(fDatabase, GeoIP.GEOIP_STANDARD)
+            gir = gi.record_by_addr(ip)
+            if gir is not None and gir.has_key('country_name') and gir['country_name'] is not None:
+                return gir['country_name'].decode('latin1').encode('utf-8')
+            else:
+                return None
 
     def ip2region(self, ip):
     ### takes an ip and turns it into city
-        fDatabase = '%s/core/GeoLiteCity.dat' % WORLDMAP_PATH #instData.getGeoIPDatabase()
-        gi  = GeoIP.open(fDatabase, GeoIP.GEOIP_STANDARD)
-        gir = gi.record_by_addr(ip)
-        if gir is not None and gir.has_key('region_name') and gir['region_name'] is not None:
-            return gir['region_name'].decode('latin1').encode('utf-8')
+
+        pattern="(\A([0-9a-f]{1,4}:){1,1}(:[0-9a-f]{1,4}){1,6}\Z)|(\A([0-9a-f]{1,4}:){1,2}(:[0-9a-f]{1,4}){1,5}\Z)|(\A([0-9a-f]{1,4}:){1,3}(:[0-9a-f]{1,4}){1,4}\Z)|(\A([0-9a-f]{1,4}:){1,4}(:[0-9a-f]{1,4}){1,3}\Z)|(\A([0-9a-f]{1,4}:){1,5}(:[0-9a-f]{1,4}){1,2}\Z)|(\A([0-9a-f]{1,4}:){1,6}(:[0-9a-f]{1,4}){1,1}\Z)|(\A(([0-9a-f]{1,4}:){1,7}|:):\Z)|(\A:(:[0-9a-f]{1,4}){1,7}\Z)|(\A((([0-9a-f]{1,4}:){6})(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3})\Z)|(\A(([0-9a-f]{1,4}:){5}[0-9a-f]{1,4}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3})\Z)|(\A([0-9a-f]{1,4}:){5}:[0-9a-f]{1,4}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A([0-9a-f]{1,4}:){1,1}(:[0-9a-f]{1,4}){1,4}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A([0-9a-f]{1,4}:){1,2}(:[0-9a-f]{1,4}){1,3}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A([0-9a-f]{1,4}:){1,3}(:[0-9a-f]{1,4}){1,2}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A([0-9a-f]{1,4}:){1,4}(:[0-9a-f]{1,4}){1,1}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A(([0-9a-f]{1,4}:){1,5}|:):(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A:(:[0-9a-f]{1,4}){1,5}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)"
+
+        regex_res = re.findall(pattern, ip)
+
+        if len(regex_res):
+            fDatabase_v6 = '%s/core/GeoLiteCityv6.dat' % WORLDMAP_PATH
+            gi_v6 = GeoIP.open(fDatabase_v6, GeoIP.GEOIP_STANDARD)
+            gir_v6 = gi_v6.record_by_addr_v6(ip)
+            if gir_v6 is not None and gir_v6.has_key('region_name') and gir_v6['region_name'] is not None:
+                return gir_v6['region_name'].decode('latin1').encode('utf-8')
+            else:
+                return None
         else:
-            return None
+            fDatabase = '%s/core/GeoLiteCity.dat' % WORLDMAP_PATH #instData.getGeoIPDatabase()
+            gi  = GeoIP.open(fDatabase, GeoIP.GEOIP_STANDARD)
+            gir = gi.record_by_addr(ip)
+            if gir is not None and gir.has_key('region_name') and gir['region_name'] is not None:
+                return gir['region_name'].decode('latin1').encode('utf-8')
+            else:
+                return None
 
     def ip2city(self, ip):
     ### takes ip and return city
-        fDatabase = '%s/core/GeoLiteCity.dat' % WORLDMAP_PATH #instData.getGeoIPDatabase()
-        gi  = GeoIP.open(fDatabase, GeoIP.GEOIP_STANDARD)
-        gir = gi.record_by_addr(ip)
-        if gir is not None and gir.has_key('city') and gir['city'] is not None:
-            return gir['city'].decode('latin1').encode('utf-8')
+
+        pattern="(\A([0-9a-f]{1,4}:){1,1}(:[0-9a-f]{1,4}){1,6}\Z)|(\A([0-9a-f]{1,4}:){1,2}(:[0-9a-f]{1,4}){1,5}\Z)|(\A([0-9a-f]{1,4}:){1,3}(:[0-9a-f]{1,4}){1,4}\Z)|(\A([0-9a-f]{1,4}:){1,4}(:[0-9a-f]{1,4}){1,3}\Z)|(\A([0-9a-f]{1,4}:){1,5}(:[0-9a-f]{1,4}){1,2}\Z)|(\A([0-9a-f]{1,4}:){1,6}(:[0-9a-f]{1,4}){1,1}\Z)|(\A(([0-9a-f]{1,4}:){1,7}|:):\Z)|(\A:(:[0-9a-f]{1,4}){1,7}\Z)|(\A((([0-9a-f]{1,4}:){6})(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3})\Z)|(\A(([0-9a-f]{1,4}:){5}[0-9a-f]{1,4}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3})\Z)|(\A([0-9a-f]{1,4}:){5}:[0-9a-f]{1,4}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A([0-9a-f]{1,4}:){1,1}(:[0-9a-f]{1,4}){1,4}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A([0-9a-f]{1,4}:){1,2}(:[0-9a-f]{1,4}){1,3}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A([0-9a-f]{1,4}:){1,3}(:[0-9a-f]{1,4}){1,2}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A([0-9a-f]{1,4}:){1,4}(:[0-9a-f]{1,4}){1,1}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A(([0-9a-f]{1,4}:){1,5}|:):(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)|(\A:(:[0-9a-f]{1,4}){1,5}:(25[0-5]|2[0-4]\d|[0-1]?\d?\d)(\.(25[0-5]|2[0-4]\d|[0-1]?\d?\d)){3}\Z)"
+
+        regex_res = re.findall(pattern, ip)
+
+        if len(regex_res):
+            fDatabase_v6 = '%s/core/GeoLiteCityv6.dat' % WORLDMAP_PATH
+            gi_v6 = GeoIP.open(fDatabase_v6, GeoIP.GEOIP_STANDARD)
+            gir_v6 = gi_v6.record_by_addr_v6(ip)
+            if gir_v6 is not None and gir_v6.has_key('city') and gir_v6['city'] is not None:
+                return gir_v6['city'].decode('latin1').encode('utf-8')
+            else:
+                return None
         else:
-            return None
+            fDatabase = '%s/core/GeoLiteCity.dat' % WORLDMAP_PATH #instData.getGeoIPDatabase()
+            gi  = GeoIP.open(fDatabase, GeoIP.GEOIP_STANDARD)
+            gir = gi.record_by_addr(ip)
+            if gir is not None and gir.has_key('city') and gir['city'] is not None:
+                return gir['city'].decode('latin1').encode('utf-8')
+            else:
+                return None
 
 class Trace:
     def traceroute(self, ui, dest_addr, force=False):
@@ -427,7 +534,7 @@ class Trace:
                             # print "parent : %s" % parent
                             xpt1, ypt1 = ui.m(hop['loc'][0], hop['loc'][1])
                             xpt2, ypt2 = ui.m(parent['loc'][0], parent['loc'][1])
-                            ui.m.plot([xpt1, xpt2], [ypt1, ypt2], 'k', color=COLOR_WARN_RISK)
+                            ui.plot_handle.append(ui.m.plot([xpt1, xpt2], [ypt1, ypt2], 'k', color=COLOR_WARN_RISK)[0])
                         # else:
                         #     pass # TODO do something ?
 
@@ -453,7 +560,7 @@ class Trace:
                             # circ = plt.Circle((hop['loc'][0], hop['loc'][1]), radius=20, color='y')
                             # ui.m.ax.add_patch(circ)
                             xpt, ypt = ui.m(hop['loc'][0], hop['loc'][1])
-                            ui.m.plot(xpt, ypt, nicon, color=COLOR_LOW_RISK if parent is None else COLOR_HIGH_RISK, markersize=nsize if parent is not None else 14)
+                            ui.plot_handle.append(ui.m.plot(xpt, ypt, nicon, color=COLOR_LOW_RISK if parent is None else COLOR_HIGH_RISK, markersize=nsize if parent is not None else 14)[0])
                         elif hop['city'] is None and hop['region'] is not None:
                             print "# region"
                             pass
@@ -461,7 +568,7 @@ class Trace:
                         elif hop['city'] is not None:
                             print "# city"
                             xpt, ypt = ui.m(hop['loc'][0], hop['loc'][1])
-                            ui.m.plot(xpt, ypt, nicon, color=COLOR_LOW_RISK if parent is None else COLOR_HIGH_RISK, markersize=nsize if parent is not None else 8)
+                            ui.plot_handle.append(ui.m.plot(xpt, ypt, nicon, color=COLOR_LOW_RISK if parent is None else COLOR_HIGH_RISK, markersize=nsize if parent is not None else 8)[0])
                             # plt.text(xpt+100000, ypt+100000, '', size=10 , color=COLOR_A, alpha=0.5, fontproperties=FONT)
                     else:
                         print "# ooops !"
@@ -592,6 +699,7 @@ class Web:
 class UI():
     def quitDialog(self, widget=None, data=None):
         if self.yesnoDialog("Do you really want to exit\nPython World Map ?"):
+            self.toggle_netstat_loop_stopped.set()
             delete()
         else:
             return 1
@@ -723,6 +831,8 @@ class UI():
         self.myip = None
         self.traceroutes = dict()
 
+        self.plot_handle = []
+
         vbox = gtk.VBox(False, 0)
         self.win.add(vbox)
 
@@ -761,6 +871,8 @@ class UI():
         # map shows through. Use current time in UTC.
         date = datetime.utcnow()
         self.m.nightshade(date, color=COLOR_D)
+
+        # self.m_orig = Basemap(self.m)
 
         # $ traceroute google.fr
         # traceroute to google.fr (173.194.34.56), 30 hops max, 60 byte packets
@@ -807,16 +919,22 @@ class UI():
         vbox2.pack_start(toolbar, False, False)
         vbox2.pack_start(self.canvas)
 
-        instNetstat = Netstat()
+        # instNetstat = Netstat()
         instWhois   = Whois()
         instTrace   = Trace()
 
-        # btn_monitor
-        btn_monitor = gtk.ToolButton(gtk.STOCK_MEDIA_PLAY)
-        btn_monitor.set_tooltip_text("Monitor Connections")
-        # btn_monitor.connect('clicked', lambda e: thread.start_new_thread(self.geoloc, ()))
-        btn_monitor.connect('clicked', lambda e: thread.start_new_thread(Netstat.netstat, (instNetstat, self)))
-        toolbar.insert(btn_monitor, -1)
+        # self.btn_monitor
+        self.btn_monitor = gtk.ToolButton(gtk.STOCK_MEDIA_PLAY)
+        self.btn_monitor.set_tooltip_text("Monitor Connections")
+        # self.btn_monitor.connect('clicked', lambda e: thread.start_new_thread(self.geoloc, ()))
+
+        self.toggle_netstat_loop_stopped = Event()
+        self.toggle_netstat_loop_state = False
+
+        self.btn_monitor.connect('clicked', lambda e: self.toggle_netstat_loop())
+        # self.btn_monitor.connect('clicked', lambda e: thread.start_new_thread(Netstat.netstat, (instNetstat, self)))
+        # self.btn_monitor.connect('clicked', lambda e: thread.start_new_thread(Netstat.netstat, (instNetstat, self)))
+        toolbar.insert(self.btn_monitor, -1)
         # toolbar.remove(toolbar.get_children()[6])
         # toolbar.remove(toolbar.get_children()[8])
 
@@ -1035,6 +1153,8 @@ class UI():
         self.liststore_config.append(["DNS resolving", "True"])
         # self.liststore_config.append(["Don't fragment", "True"])
         self.liststore_config.append(["Fast geoloc (without route nodes)", "True"])
+        self.liststore_config.append(["Period between each monitor loop (in seconds)", "10"])
+
         treeview_config.set_sensitive(True) #TODO BACK TO WORK HERE
 
         paned.pack2(vb_expanders, resize=False, shrink=True)
@@ -1044,7 +1164,7 @@ class UI():
         if model[path][1] == new_text:
             print "Option '%s' no change: '%s'" % (model[path][0], model[path][1])
         else:
-            if model[path][0] in ["DNS resolving","Don't fragment", "Fast geoloc (without route nodes)"]:
+            if model[path][0] in ["DNS resolving", "Don't fragment", "Fast geoloc (without route nodes)"]:
                 if new_text[0].lower() == 't':
                     new_text = 'True'
                 elif new_text[0].lower() == 'f':
@@ -1072,6 +1192,18 @@ class UI():
             self.win.fullscreen()
             self.fullscreen-=1
 
+    def toggle_netstat_loop(self):
+        if self.toggle_netstat_loop_state:
+            self.toggle_netstat_loop_state = False
+            self.btn_monitor.set_stock_id(gtk.STOCK_MEDIA_PLAY)
+            self.toggle_netstat_loop_stopped.set()
+        else:
+            self.toggle_netstat_loop_state = True
+            self.btn_monitor.set_stock_id(gtk.STOCK_MEDIA_PAUSE)
+            netstat = Netstat(self.toggle_netstat_loop_stopped, self)
+            netstat.thread.start()
+        # print self.toggle_netstat_loop_state
+
 def delete():
     """Gestion des evenements de fermeture"""
     exit() # but gtk.main_quit() fail with KeyboardInterrupt ...
@@ -1087,4 +1219,5 @@ def main():
         if os.name == "nt":
             gtk.gdk.threads_leave()
     except (KeyboardInterrupt, SystemExit):
+        u.toggle_netstat_loop_stopped.set()
         delete()

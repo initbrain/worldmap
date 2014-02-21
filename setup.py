@@ -49,7 +49,8 @@ setup(
         ('worldmap/core/', ['worldmap/core/modules.json',
                             'worldmap/core/knowledge.db',
                             'worldmap/core/inconsolata-dz.otf',
-                            'worldmap/core/GeoLiteCity.dat'])
+                            'worldmap/core/GeoLiteCity.dat',
+                            'worldmap/core/GeoLiteCityv6.dat'])
     ]
 )
 
