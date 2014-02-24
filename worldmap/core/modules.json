@@ -25,7 +25,8 @@
                                         "tested":
                                             [
                                                 "ubuntu 12.10",
-                                                "xubuntu 12.10"
+                                                "xubuntu 12.10",
+                                                "Debian 7 (Wheezy)"
                                             ]
                                     }
                                 ]
@@ -50,7 +51,8 @@
                                         "tested":
                                             [
                                                 "ubuntu 12.10",
-                                                "xubuntu 12.10"
+                                                "xubuntu 12.10",
+                                                "Debian 7 (Wheezy)"
                                             ]
                                     }
                                 ]
@@ -82,7 +84,8 @@
                                             [
                                                 "ubuntu 12.10",
                                                 "xubuntu 12.10",
-                                                "Fedora 18 Live Security (lxde)"
+                                                "Fedora 18 Live Security (lxde)",
+                                                "Debian 7 (Wheezy)"
                                             ]
                                     }
                                 ]
