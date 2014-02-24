@@ -72,12 +72,14 @@ class Netstat(object):
         self.ui = ui
 
     def run(self):
-        print "netstat thread"
+        print "\nnetstat thread"
+        print "##############"
         # self.netstat(self.ui)
 
         wait_period = 0.5
         while not self.stopped.wait(wait_period):
             print "\nnetstat thread loop"
+            print "###################"
             self.netstat(self.ui)
 
             # Config parameter used here
@@ -94,7 +96,20 @@ class Netstat(object):
     def netstat(self, ui):
     ### retrieves the netstat table from /proc/net/tcp
     ### does practicly the same as typing netstat into the terminal
-        ui.liststore_netstat.clear()
+
+        # print "#" * 50
+        # # print ui.liststore_netstat
+        # for elem_stored in ui.liststore_netstat:
+        #     print "Source IP : %s" % elem_stored[1]
+        #     print "Source Port : %s" % elem_stored[2]
+        #     print "Destination IP : %s" % elem_stored[3]
+        #     print "Destination Port : %s" % elem_stored[4]
+        #     print "PID : %s" % elem_stored[5]
+        #     print "#" * 25
+        # # print ui.traceroutes
+        # print "#" * 50
+
+        # ui.liststore_netstat.clear()
 
         # ### most likely a Linux distribution
         # ### TCP section:
@@ -149,8 +164,7 @@ class Netstat(object):
         ui.canvas.draw()
         gtk.gdk.threads_leave()
 
-        print "##################################################"
-
+        no_connection = True
         for pid in psutil.get_pid_list():
             try:
                 p = psutil.Process(pid)
@@ -159,18 +173,75 @@ class Netstat(object):
             finally:
                 c = p.get_connections()
                 if c:
+                    # Delete closed connections from liststore
+                    for y in ui.liststore_netstat:
+                        connexion_closed = True
+                        for x in c:
+                            if x.status == "ESTABLISHED":
+                                if y[1] == x.local_address[0]\
+                                and int(y[2]) == x.local_address[1]\
+                                and y[3] == x.remote_address[0]\
+                                and int(y[4]) == x.remote_address[1]\
+                                and int(y[5]) == pid:
+                                    connexion_closed = False
+                            else:
+                                connexion_closed = False
+
+                        if connexion_closed is True:
+                            # print y[5]
+                            # y.destroy()
+                            ui.liststore_netstat.remove(y.iter)
+
                     for x in c:
                         # print x
                         if x.status == "ESTABLISHED":
-                            print "%s %s:%d -> %s:%d (PID:%d CMD:'%s')" % (x.status, x.local_address[0], x.local_address[1], x.remote_address[0], x.remote_address[1], pid, ' '.join(p.cmdline))
-                            ui.liststore_netstat.append([x.status, x.local_address[0], x.local_address[1], x.remote_address[0], x.remote_address[1], pid, ' '.join(p.cmdline)])#[ip_src, port_src, ip_dst, port_dst, 'UDP'])
+                            no_connection = False
+                            # Add connection in liststore if not already exist
+                            already_stored = False
+                            for y in ui.liststore_netstat:
+                                # print "Source IP : %s" % y[1]
+                                # print "Source Port : %s" % y[2]
+                                # print "Destination IP : %s" % y[3]
+                                # print "Destination Port : %s" % y[4]
+                                # print "PID : %s" % y[5]
 
+                                # print "- " * 50
+                                # print "y[1]", type(y[1]), y[1]
+                                # print "x.local_address[0]", type(x.local_address[0]), x.local_address[0]
+                                # print "- " * 50
+                                # print "y[2]", type(y[2]), y[2]
+                                # print "x.local_address[1]", type(x.local_address[1]), x.local_address[1]
+                                # print "- " * 50
+                                # print "y[3]", type(y[3]), y[3]
+                                # print "x.remote_address[2]", type(x.remote_address[0]), x.remote_address[0]
+                                # print "- " * 50
+                                # print "y[4]", type(y[4]), y[4]
+                                # print "x.remote_address[3]", type(x.remote_address[1]), x.remote_address[1]
+                                # print "- " * 50
+                                # print "y[5]", type(y[5]), y[5]
+                                # print "pid", type(pid), pid
+                                # print "- " * 25
+
+                                if y[1] == x.local_address[0]\
+                                and int(y[2]) == x.local_address[1]\
+                                and y[3] == x.remote_address[0]\
+                                and int(y[4]) == x.remote_address[1]\
+                                and int(y[5]) == pid:
+                                    already_stored = True
+
+                            # Add if not already present in liststore
+                            if already_stored is False:
+                                print "%s %s:%d -> %s:%d (PID:%d CMD:'%s')" % (x.status, x.local_address[0], x.local_address[1], x.remote_address[0], x.remote_address[1], pid, ' '.join(p.cmdline))
+                                ui.liststore_netstat.append([x.status, x.local_address[0], x.local_address[1], x.remote_address[0], x.remote_address[1], pid, ' '.join(p.cmdline)])#[ip_src, port_src, ip_dst, port_dst, 'UDP'])
+
+                            # Retrieve my IP address if i don't know it
                             if ui.myip is None:
                                 instWeb = Web()
                                 ui.myip = Web.getMyIp(instWeb)
 
                             # ui.traceroutes[x.remote_address[0]]['state'] = 'mapped'
                             # print "ui.traceroutes :", ui.traceroutes
+
                             if not ui.traceroutes.has_key(x.remote_address[0]) or not ui.traceroutes[x.remote_address[0]]['traceroute']:
                                 ui.traceroutes[x.remote_address[0]] = {'traceroute': dict(), 'error': None, 'state': 'working'}
 
@@ -184,17 +255,14 @@ class Netstat(object):
                                 print err
 
                             if myloc[0] is not None and dstloc[0] is not None:
-                                print '-> location found'
+                                if already_stored is False:
+                                    print '-> location found'
                                 # Config parameter used here
                                 fast = True
                                 for row in ui.liststore_config:
                                     if row[0] == "Fast geoloc (without route nodes)":
-                                        # if row[1] == "True":
-                                        #     print "is true"
                                         if row[1] == "False":
                                             fast = False
-                                            print "is false"
-                                        # print row[1], type(row[1])
                                         break
 
                                 if fast:
@@ -212,7 +280,7 @@ class Netstat(object):
                                     ui.plot_handle.append(ui.m.plot(xpt, ypt, nicon, color=COLOR_HIGH_RISK, markersize=nsize)[0])
 
                                     ui.traceroutes[x.remote_address[0]]['state'] = 'fast mapped'
-                                    # print "ui.traceroutes :", ui.traceroutes
+
                                     gtk.gdk.threads_enter()
                                     ui.canvas.draw()
                                     gtk.gdk.threads_leave()
@@ -223,6 +291,8 @@ class Netstat(object):
                                 print '-> location not found'
                                 ui.traceroutes[x.remote_address[0]]['error'] = 'no location found'
                                 ui.traceroutes[x.remote_address[0]]['state'] = 'error'
+        if no_connection is True:
+            ui.liststore_netstat.clear()
 
         # if ui.liststore_netstat is not None:
         #     instTrace = Trace()
@@ -678,6 +748,8 @@ class Web:
         return result
 
     def getMyIp(self, http_proxy=None, timeout=10, retry=2):
+        #TODO HTTP request is not the appropriate solution for this, getting it directly from DNS server.
+        # See http://unix.stackexchange.com/questions/22615/how-can-i-get-my-external-ip-address-in-bash/81699#81699
         myip = None
         for url in ("http://checkip.dyndns.com",
                     "http://ip.nu",
@@ -687,12 +759,12 @@ class Web:
             source = self.req(url, http_proxy, timeout, retry)
             # print source
             if source:
-                print "MyIP webservice used : %s" % str(url)
+                print "Webservice used to retrieve my IP address : %s" % str(url)
                 resRegExpIp = re.compile("(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)").findall(source)
-                print "len(resRegExpIp) : %d" % len(resRegExpIp)
+                # print "len(resRegExpIp) : %d" % len(resRegExpIp)
                 if len(resRegExpIp) == 1:
                     myip = '.'.join(resRegExpIp[0])
-                    print "IP found : %s" % str(myip)
+                    print "My IP address found : %s" % str(myip)
                     break
         return myip
 
