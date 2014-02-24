@@ -21,7 +21,7 @@ class IPdb(SqliteDatabase):
 
 class BaseModel(Model):
     """
-    Basic database model, uses RSSdb as the database object.
+    Basic database model, uses IPdb as the database object.
     """
     class Meta:
         database = IPdb("%s/core/knowledge.db" % WORLDMAP_PATH, check_same_thread=False)
